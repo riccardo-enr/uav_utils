@@ -7,17 +7,27 @@ sys.path.append('/home/riccardo/phd/research/nmpc_acados_py/uav_utils/python')
 from utils import quaternion_to_euler
 
 def plot(ref, path, q_path, u_path, dt, time_record):
+    plot_position(ref, path, q_path)
+    # plot_attitude(path, q_path)
+    plot_cpu_time(time_record)
+    plot_inputs(u_path, dt)
+    plot_quaternion(q_path)
+    plt.show()
+
+def plot_position(ref, path, q_path):
     xref = ref[:,0]
     yref = ref[:,1]
     zref = ref[:,2]
     
     # Visualization
     path = np.array(path)
+    q_path = np.array(q_path)
+    
     plt.figure()
     plt.title('UAV Position in ENU frame')
     ax = plt.axes(projection='3d')
     ax.plot(yref, xref, -zref, c=[1,0,0], label='goal')
-    ax.plot(path[:,1], path[:,0], -path[:,2])  # Swap x and y, negate z
+    ax.plot(path[:,1], path[:,0], - path[:,2], label='path')  # Swap x and y, negate z
     ax.axis('auto')
     ax.set_xlabel('y [m]')  # Swap x and y labels
     ax.set_ylabel('x [m]')
@@ -25,14 +35,16 @@ def plot(ref, path, q_path, u_path, dt, time_record):
     ax.legend()
     ax.grid(True)
 
-    # Plot UAV attitude axes
+    # Define time variable
+    time = np.arange(0, len(q_path), 1)
+    
     interval = 50
     for i in range(0, len(q_path), interval):
         euler_angles = quaternion_to_euler(q_path[i])
         origin = path[i]
         R = np.array([[math.cos(euler_angles[2])*math.cos(euler_angles[1]), math.cos(euler_angles[2])*math.sin(euler_angles[1])*math.sin(euler_angles[0])-math.sin(euler_angles[2])*math.cos(euler_angles[0]), math.cos(euler_angles[2])*math.sin(euler_angles[1])*math.cos(euler_angles[0])+math.sin(euler_angles[2])*math.sin(euler_angles[0])],
-                  [math.sin(euler_angles[2])*math.cos(euler_angles[1]), math.sin(euler_angles[2])*math.sin(euler_angles[1])*math.sin(euler_angles[0])+math.cos(euler_angles[2])*math.cos(euler_angles[0]), math.sin(euler_angles[2])*math.sin(euler_angles[1])*math.cos(euler_angles[0])-math.cos(euler_angles[2])*math.sin(euler_angles[0])],
-                  [-math.sin(euler_angles[1]), math.cos(euler_angles[1])*math.sin(euler_angles[0]), math.cos(euler_angles[1])*math.cos(euler_angles[0])]])
+                      [math.sin(euler_angles[2])*math.cos(euler_angles[1]), math.sin(euler_angles[2])*math.sin(euler_angles[1])*math.sin(euler_angles[0])+math.cos(euler_angles[2])*math.cos(euler_angles[0]), math.sin(euler_angles[2])*math.sin(euler_angles[1])*math.cos(euler_angles[0])-math.cos(euler_angles[2])*math.sin(euler_angles[0])],
+                      [-math.sin(euler_angles[1]), math.cos(euler_angles[1])*math.sin(euler_angles[0]), math.cos(euler_angles[1])*math.cos(euler_angles[0])]])
         x_axis = R @ np.array([1, 0, 0])
         y_axis = R @ np.array([0, 1, 0])
         z_axis = R @ np.array([0, 0, 1])
@@ -41,13 +53,14 @@ def plot(ref, path, q_path, u_path, dt, time_record):
         ax.quiver(origin[1], origin[0], -origin[2], -z_axis[1], -z_axis[0], z_axis[2], color='b', length=0.05)  # Swap x and y, negate z
     ax.grid(True)
 
+def plot_cpu_time(time_record):
     plt.figure()
     plt.plot(time_record)
     plt.legend()
     plt.ylabel('CPU Time [s]')
     plt.grid(True)
 
-    # Visualize inputs
+def plot_inputs(u_path, dt):
     u_path = np.array(u_path)
     time = np.arange(0, len(u_path)*dt, dt)
     plt.figure()
@@ -73,8 +86,11 @@ def plot(ref, path, q_path, u_path, dt, time_record):
     plt.xlabel('Time [s]')
     plt.grid(True)
     plt.tight_layout()
+
+def plot_quaternion(q_path):
+    # Define time variable
+    time = np.arange(0, len(q_path), 1)
     
-    # Visualize quaternion
     q_path = np.array(q_path)
     plt.figure()
     plt.suptitle("UAV attitude")
@@ -99,5 +115,3 @@ def plot(ref, path, q_path, u_path, dt, time_record):
     plt.xlabel('Time [s]')
     plt.grid(True)
     plt.tight_layout()
-    
-    plt.show()

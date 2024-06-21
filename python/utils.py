@@ -632,6 +632,11 @@ def make_bz_matrix(x_dims, u_dims, x_feats, u_feats):
     return bz
 
 
+def quaternion_error(q, q_ref):
+    q_error = q_dot_q(q, quaternion_inverse(q_ref))
+    return q_error
+
+
 def quaternion_state_mse(x, x_ref, mask):
     """
     Calculates the MSE of the 13-dimensional state (p_xyz, q_wxyz, v_xyz, r_xyz) wrt. the reference state. The MSE of
