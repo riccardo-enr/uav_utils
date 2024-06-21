@@ -7,14 +7,62 @@ sys.path.append('/home/riccardo/phd/research/nmpc_acados_py/uav_utils/python')
 from utils import quaternion_to_euler
 
 def plot(ref, path, q_path, u_path, dt, time_record):
-    plot_position(ref, path, q_path)
+    plot_position(ref, path)
+    plot3d(ref, path, q_path)
     # plot_attitude(path, q_path)
     plot_cpu_time(time_record)
     plot_inputs(u_path, dt)
     plot_quaternion(q_path)
     plt.show()
 
-def plot_position(ref, path, q_path):
+def plot_position(ref, path):
+    xref = ref[:, 0]
+    yref = ref[:, 1]
+    zref = ref[:, 2]
+
+    # Convert path to numpy array for easier manipulation
+    path = np.array(path)
+    x_path = path[:, 0]
+    y_path = path[:, 1]
+    z_path = path[:, 2]
+
+    # Time vector for x-axis
+    time = np.arange(len(xref))
+
+    # Create subplots
+    # fig, axs = plt.subplots(3, 1, figsize=(10, 15))
+    fig, axs = plt.subplots(3, 1)
+
+    # Plot X
+    axs[0].plot(time, xref, label='X Reference', color='r', linestyle='--')
+    axs[0].plot(time, x_path, label='X Path', color='b')
+    axs[0].set_title('X Position Over Time')
+    axs[0].set_xlabel('Time')
+    axs[0].set_ylabel('X Position')
+    axs[0].legend()
+    axs[0].grid(True)
+
+    # Plot Y
+    axs[1].plot(time, yref, label='Y Reference', color='r', linestyle='--')
+    axs[1].plot(time, y_path, label='Y Path', color='b')
+    axs[1].set_title('Y Position Over Time')
+    axs[1].set_xlabel('Time')
+    axs[1].set_ylabel('Y Position')
+    axs[1].legend()
+    axs[1].grid(True)
+
+    # Plot Z
+    axs[2].plot(time, zref, label='Z Reference', color='r', linestyle='--')
+    axs[2].plot(time, z_path, label='Z Path', color='b')
+    axs[2].set_title('Z Position Over Time')
+    axs[2].set_xlabel('Time')
+    axs[2].set_ylabel('Z Position')
+    axs[2].legend()
+    axs[2].grid(True)
+
+    plt.tight_layout()
+    
+def plot3d(ref, path, q_path):
     xref = ref[:,0]
     yref = ref[:,1]
     zref = ref[:,2]
