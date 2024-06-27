@@ -1,9 +1,14 @@
+import os
 import sys
 import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-sys.path.append('/home/riccardo/phd/research/nmpc_acados_py/uav_utils/python')
+dir_path = os.path.dirname(os.path.realpath(__file__))
+utils_path = os.path.join(dir_path, '../')
+utils_path = os.path.abspath(os.path.realpath(utils_path))
+if utils_path not in sys.path:
+    sys.path.append(utils_path)
 from utils import quaternion_to_euler
 
 def plot(ref, path, q_path, u_path, dt, time_record):
