@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.10)
+project(uav_utils)
+
+set(CMAKE_CXX_STANDARD 14)
+
+# Find Eigen3
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+
+add_subdirectory(pybind11)
+
+pybind11_add_module(uav_utils_py
+    src/quaternion.cpp
+    src/quaternion_py.cpp
+)
+
+add_library(uav_utils STATIC
+    src/quaternion.cpp
+)
+
+target_include_directories(uav_utils PUBLIC include ${EIGEN3_INCLUDE_DIR})
