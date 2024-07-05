@@ -10,4 +10,4 @@ def is_setpoint_reached(setpoint, current_position, threshold_pos, threshold_att
             return np.linalg.norm(np.array(setpoint[:3]) - np.array(current_position[:3])) < threshold_pos and np.abs(setpoint[3] - current_position[3]) < threshold_att
         elif len(current_position) == 7:
             # assume current attitude is in quaternion form
-            
+            pass

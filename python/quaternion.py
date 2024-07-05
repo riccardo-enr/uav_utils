@@ -1,5 +1,8 @@
 import numpy as np
 import casadi as cs
+from scipy.spatial.transform import Rotation as R
+# from casadi import SX, MX, vertcat, Function, sqrt, norm_2, dot, cross, atan2, if_else
+import spatial_casadi as sc
 
 def quat2euler(q):
     """
@@ -110,3 +113,21 @@ def quaternion_product(q1, q2):
     d = a1 * d2 + b1 * c2 - c1 * b2 + d1 * a2
 
     return cs.vertcat(a, b, c, d)
+
+def eul2quat(rpy):
+    """
+    Convert Euler angles to quaternion.
+
+    Parameters:
+    rpy : np.ndarray roll, pitch, yaw
+
+    Returns:
+    np.ndarray
+        Quaternion [w, x, y, z] representing the rotation.
+    """
+    roll, pitch, yaw = rpy
+    # Create a rotation object from Euler angles
+    r = R.from_euler('xyz', [roll, pitch, yaw], degrees=True)
+    
+    # Convert the rotation object to quaternion (scalar-last format)
+    q = r.as_quat()
