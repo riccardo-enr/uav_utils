@@ -31,23 +31,26 @@ rclpy
 #   DESTINATION lib/${PROJECT_NAME})
 
 #PY --------------------------------------------------------------------
+#install python executables
+
+set(PYTHON_EXECUTABLES
+  python/quaternion.py
+  python/transforms.py
+)
+
+set(CONTROL_PYTHON_EXECUTABLES
+  python/control/nmpc.py
+  python/control/nmpc_utils.py
+)
+
+install(PROGRAMS
+  ${PYTHON_EXECUTABLES}
+  ${CONTROL_PYTHON_EXECUTABLES}
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 #install python modules
 ament_python_install_package(${PROJECT_NAME})
-
-#install python executables
-# install(PROGRAMS
-#   scripts/simple_node.py
-#   DESTINATION lib/${PROJECT_NAME})
-
-install(PROGRAMS
-  python/quaternion.py
-  DESTINATION lib/${PROJECT_NAME}/python
-)
-
-install(PROGRAMS
-  python/control/nmpc.py
-  DESTINATION lib/${PROJECT_NAME}/python/control
-)
 
 #--------------------------------------------------------------------
 # export dependencies
