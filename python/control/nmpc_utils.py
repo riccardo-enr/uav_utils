@@ -3,7 +3,7 @@ import numpy as np
 def set_mpc_target_pos(NmpcNode, position_pts : None, attitude_pts : None):
     # Mock trajectory for testing
     if position_pts is None:
-        position_pts = np.array([[0.0, 0.0, 1.0]] * (NmpcNode.N + 1))  # Example position setpoint
+        position_pts = np.array([[0.0, 0.0, 2.0]] * (NmpcNode.N + 1))  # Example position setpoint
     else:
         position_pts = position_pts
     if attitude_pts is None:
@@ -15,13 +15,13 @@ def set_mpc_target_pos(NmpcNode, position_pts : None, attitude_pts : None):
     for j in range(NmpcNode.solver.N + 1):
         NmpcNode.p[14:21] = np.concatenate([position_pts[j], attitude_pts[j]], axis=0)
         NmpcNode.solver.set(j, 'p', NmpcNode.p)
-        
+
 def set_current_state(NmpcNode):
     
     """aggregates individual states to combined state of system
     """
     # , NmpcNode.state_timestamp
-    NmpcNode.current_state = np.concatenate((NmpcNode.position, NmpcNode.attitude, NmpcNode.velocity, NmpcNode.angular_velocity, NmpcNode.thrust), axis=None)
+    NmpcNode.current_state = np.concatenate((NmpcNode.position, NmpcNode.attitude, NmpcNode.velocity, NmpcNode.angular_velocity), axis=None)
 
     #self.imu_data = np.concatenate((self.linear_accel_real, self.angular_accel_real, self.imu_timestamp), axis=None)
     
