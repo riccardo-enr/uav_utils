@@ -42,14 +42,28 @@ def thrust_to_motor_values(thrust):
     u_motor_values = thrust / max_thrust
     # u_motor_values = - u_motor_values
     
-    max_input = 0.9
+    max_input = 1.0
+    min_input = 0.1
     
     for i in range(len(u_motor_values)):
         if u_motor_values[i] > max_input:
             u_motor_values[i] = max_input
-        elif u_motor_values[i] < 0:
-            u_motor_values[i] = 0
+        elif u_motor_values[i] < min_input:
+            u_motor_values[i] = min_input
 
     return u_motor_values
+
+def motor_values_to_thrust(motor_values):
+    """Converts motor values to thrust
+    """
+    thrust_constant = 8.54858e-06
+    max_rotor_speed = 1000
     
+    motor_values /= max_rotor_speed
+    
+    # max_thrust
+    max_thrust = thrust_constant * max_rotor_speed**2
+    thrust = motor_values * max_thrust
+    
+    return thrust    
     
