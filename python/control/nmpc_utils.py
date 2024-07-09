@@ -1,27 +1,36 @@
 import numpy as np
 
-def set_mpc_target_pos(NmpcNode, position_pts : None, attitude_pts : None):
+def set_mpc_target_pos(NmpcNode, position_pts : None):
     # Mock trajectory for testing
     if position_pts is None:
         position_pts = np.array([[0.0, 0.0, 2.0]] * (NmpcNode.N + 1))  # Example position setpoint
     else:
         position_pts = position_pts
-    if attitude_pts is None:
-        attitude_pts = np.array([[1.0, 0.0, 0.0, 0.0]] * (NmpcNode.N + 1))  # Example attitude setpoint
-    else:
-        attitude_pts = attitude_pts
+    # if attitude_pts is None:
+    #     attitude_pts = np.array([[1.0, 0.0, 0.0, 0.0]] * (NmpcNode.N + 1))  # Example attitude setpoint
+    # else:
+    #     attitude_pts = attitude_pts
 
-    # Set parameters for the solver
-    for j in range(NmpcNode.solver.N + 1):
-        NmpcNode.p[14:21] = np.concatenate([position_pts[j], attitude_pts[j]], axis=0)
-        NmpcNode.solver.set(j, 'p', NmpcNode.p)
+    # # Set parameters for the solver
+    # for j in range(NmpcNode.solver.N + 1):
+    #     NmpcNode.p[14:21] = np.concatenate([position_pts[j], attitude_pts[j]], axis=0)
+    #     NmpcNode.solver.set(j, 'p', NmpcNode.p)
+        
+    hover_thrust = np.array([2.0 * 9.81])  # Convert hover_thrust to an array
+    ref_quat = np.array([1.0, 0.0, 0.0, 0.0])
 
+    for j in range(NmpcNode.solver.N):
+        yref = np.concatenate([position_pts[j], np.zeros(3), hover_thrust, ref_quat], axis=0)
+        NmpcNode.solver.set(j, "yref", yref)
+
+    NmpcNode.solver.set(NmpcNode.solver.N, "yref", np.concatenate([position_pts[NmpcNode.solver.N], np.zeros(3)], axis=0))
+    
 def set_current_state(NmpcNode):
     
     """aggregates individual states to combined state of system
     """
     # , NmpcNode.state_timestamp
-    NmpcNode.current_state = np.concatenate((NmpcNode.position, NmpcNode.attitude, NmpcNode.velocity, NmpcNode.angular_velocity), axis=None)
+    NmpcNode.current_state = np.concatenate((NmpcNode.position, NmpcNode.velocity), axis=None)
 
     #self.imu_data = np.concatenate((self.linear_accel_real, self.angular_accel_real, self.imu_timestamp), axis=None)
     
@@ -67,3 +76,15 @@ def motor_values_to_thrust(motor_values):
     
     return thrust    
     
+def normalize_thrust(thrust):
+    """Normalizes thrust to be between 0 and 1
+    """
+    thrust_constant = 8.54858e-06
+    max_rotor_speed = 1000
+    
+    # max_thrust
+    max_thrust = thrust_constant * max_rotor_speed**2
+    max_thrust *= 4
+    thrust = thrust / max_thrust
+    
+    return thrust
