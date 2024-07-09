@@ -3,7 +3,7 @@ import numpy as np
 def set_mpc_target_pos(NmpcNode, position_pts : None):
     # Mock trajectory for testing
     if position_pts is None:
-        position_pts = np.array([[0.0, 0.0, 2.0]] * (NmpcNode.N + 1))  # Example position setpoint
+        position_pts = np.array([[0.0, 0.0, - 2.0]] * (NmpcNode.N + 1))  # Example position setpoint
     else:
         position_pts = position_pts
     # if attitude_pts is None:
@@ -15,9 +15,15 @@ def set_mpc_target_pos(NmpcNode, position_pts : None):
     # for j in range(NmpcNode.solver.N + 1):
     #     NmpcNode.p[14:21] = np.concatenate([position_pts[j], attitude_pts[j]], axis=0)
     #     NmpcNode.solver.set(j, 'p', NmpcNode.p)
-        
-    hover_thrust = np.array([2.0 * 9.81])  # Convert hover_thrust to an array
+    
+    thrust_constant = 8.54858e-06
+    max_rotor_speed = 1000
+    max_thrust = thrust_constant * max_rotor_speed**2
+    hover_thrust = 0.8 * max_thrust * 4
+    hover_thrust = np.array([hover_thrust])
     ref_quat = np.array([1.0, 0.0, 0.0, 0.0])
+
+    print(hover_thrust)
 
     for j in range(NmpcNode.solver.N):
         yref = np.concatenate([position_pts[j], np.zeros(3), hover_thrust, ref_quat], axis=0)

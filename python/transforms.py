@@ -1,5 +1,7 @@
 import numpy as np
+from math import sqrt
 from scipy.spatial.transform import Rotation as R
+from quaternion import quaternion_multiply, euler_to_quaternion_numpy
 
 def NED_to_ENU(input_array):
     """
@@ -36,3 +38,41 @@ def NED_to_ENU(input_array):
         raise ValueError("Input array must be either a 3D vector or a quaternion (shape (3,) or (4,)).")
     
     return rotated_array
+
+def quat_NED2ENU(input_quat):
+    """
+    Convert a quaternion from NED (North-East-Down) to ENU (East-North-Up) frame.
+
+    This function converts a quaternion representing a rotation in the NED coordinate frame to
+    the equivalent quaternion in the ENU coordinate frame.
+
+    Parameters:
+    - input_quat: A numpy array representing the input quaternion in NED frame [w, x, y, z]
+
+    Returns:
+    - output_quat: A numpy array representing the converted quaternion in ENU frame [w, x, y, z]
+    """
+    ned2enu_quaternion = euler_to_quaternion_numpy([np.pi, 0, np.pi/2])
+    
+    output_quat = quaternion_multiply(ned2enu_quaternion, input_quat)
+    
+    return output_quat
+
+def quat_ENU2NED(input_quat):
+    """
+    Convert a quaternion from ENU (East-North-Up) to NED (North-East-Down) frame.
+
+    This function converts a quaternion representing a rotation in the ENU coordinate frame to
+    the equivalent quaternion in the NED coordinate frame.
+
+    Parameters:
+    - input_quat: A numpy array representing the input quaternion in ENU frame [w, x, y, z]
+
+    Returns:
+    - output_quat: A numpy array representing the converted quaternion in NED frame [w, x, y, z]
+    """
+    enu2ned_quaternion = euler_to_quaternion_numpy([-np.pi, 0, -np.pi/2])
+    
+    output_quat = quaternion_multiply(enu2ned_quaternion, input_quat)
+    
+    return output_quat

@@ -4,20 +4,23 @@ from scipy.spatial.transform import Rotation as R
 # from casadi import SX, MX, vertcat, Function, sqrt, norm_2, dot, cross, atan2, if_else
 import spatial_casadi as sc
 
-def quat2euler(q):
+def euler_to_quaternion_numpy(rpy):
     """
-    Convert quaternion to euler angles
+    Convert Euler angles to quaternion.
 
     Parameters:
-    - q (list): Quaternion represented as a list [qw, qx, qy, qz]
+    rpy : np.ndarray roll, pitch, yaw
 
     Returns:
-    - list: Euler angles represented as a list [roll, pitch, yaw]
+    np.ndarray
+        Quaternion [w, x, y, z] representing the rotation.
     """
-    qw = q[0]
-    qx = q[1]
-    qy = q[2]
-    qz = q[3]
+    roll, pitch, yaw = rpy
+    # Create a rotation object from Euler angles
+    r = R.from_euler('xyz', [roll, pitch, yaw], degrees=True)
+    
+    # Convert the rotation object to quaternion (scalar-last format)
+    q = r.as_quat()
     
 def quat2rotm(q):
     """
@@ -75,25 +78,39 @@ def quat2rotm(qw: cs.MX.sym, qx: cs.MX.sym, qy: cs.MX.sym, qz: cs.MX.sym) -> cs.
     R[2, 2] = r33
     return R
 
-def quaternion_product(a1, b1, c1, d1, a2, b2, c2, d2):
+def quaternion_product_numpy(q1, q2):
     """
-    Compute the Hamilton product of two quaternions using Casadi.
+    Compute the Hamilton product of two quaternions.
+
+    This function calculates the Hamilton product of two quaternions using the formula:
+    q = q1 * q2 = (a1 * a2 - b1 * b2 - c1 * c2 - d1 * d2,
+                   a1 * b2 + b1 * a2 + c1 * d2 - d1 * c2,
+                   a1 * c2 - b1 * d2 + c1 * a2 + d1 * b2,
+                   a1 * d2 + b1 * c2 - c1 * b2 + d1 * a2)
 
     Parameters:
-    - a1, b1, c1, d1: components of the first quaternion
-    - a2, b2, c2, d2: components of the second quaternion
+    - q1: A numpy array representing the components of the first quaternion (a1, b1, c1, d1)
+    - q2: A numpy array representing the components of the second quaternion (a2, b2, c2, d2)
 
     Returns:
-    - components of the Hamilton product quaternion
+    - A numpy array representing the components of the Hamilton product quaternion (a, b, c, d)
     """
+    q1 = np.asarray(q1)
+    q2 = np.asarray(q2)
+    
+    a1, b1, c1, d1 = q1
+    a2, b2, c2, d2 = q2
+    
     a = a1 * a2 - b1 * b2 - c1 * c2 - d1 * d2
     b = a1 * b2 + b1 * a2 + c1 * d2 - d1 * c2
     c = a1 * c2 - b1 * d2 + c1 * a2 + d1 * b2
     d = a1 * d2 + b1 * c2 - c1 * b2 + d1 * a2
 
-    return a, b, c, d
+    out_quat = np.array([a, b, c, d])
 
-def quaternion_product(q1, q2):
+    return out_quat
+
+def quaternion_product_casadi(q1, q2):
     """
     Compute the Hamilton product of two quaternions using Casadi.
 
@@ -131,3 +148,19 @@ def eul2quat(rpy):
     
     # Convert the rotation object to quaternion (scalar-last format)
     q = r.as_quat()
+    
+def quaternion_inverse(q):
+    w, x, y, z = q[0], q[1], q[2], q[3]
+
+    if isinstance(q, np.ndarray):
+        return np.array([w, -x, -y, -z])
+    else:
+        return cs.vertcat(w, -x, -y, -z)
+    
+def quaternion_multiply(quaternion1, quaternion0):
+    w0, x0, y0, z0 = quaternion0
+    w1, x1, y1, z1 = quaternion1
+    return np.array([-x1 * x0 - y1 * y0 - z1 * z0 + w1 * w0,
+                     x1 * w0 + y1 * z0 - z1 * y0 + w1 * x0,
+                     -x1 * z0 + y1 * w0 + z1 * x0 + w1 * y0,
+                     x1 * y0 - y1 * x0 + z1 * w0 + w1 * z0])
