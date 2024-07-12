@@ -23,7 +23,7 @@ def set_current_state(NmpcNode):
     """aggregates individual states to combined state of system
     """
     # , NmpcNode.state_timestamp
-    NmpcNode.current_state = np.concatenate((NmpcNode.position, NmpcNode.velocity), axis=None)
+    NmpcNode.current_state = np.concatenate((NmpcNode.position, NmpcNode.velocity, NmpcNode.acceleration), axis=None)
 
     #self.imu_data = np.concatenate((self.linear_accel_real, self.angular_accel_real, self.imu_timestamp), axis=None)
 
@@ -100,7 +100,9 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
 
     current_R = R.from_quat(NmpcNode.attitude, scalar_first=True)
 
-    # Ensure the acceleration_sp_NED has the correct shape (3,)
+    # acceleration_sp_NED[0] = np.clip(acceleration_sp_NED[0], -1.0, 1.0)
+    # acceleration_sp_NED[1] = np.clip(acceleration_sp_NED[1], -1.0, 1.0)
+
     if acceleration_sp_NED.shape == (3, 1):
         acceleration_sp_NED = acceleration_sp_NED.reshape(3)
     elif acceleration_sp_NED.shape != (3,):
@@ -112,17 +114,27 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
     thrust = acceleration_sp_body[2] * 2.0
     # if np.abs(thrust) < 0.1:
     #    raise ValueError("Thrust is too low")
-    thrust = - normalize_thrust(thrust)
-
+    thrust = normalize_thrust(thrust)
+    thrust = np.clip(thrust, -1.0, 0.0)
     yaw_sp = yaw_sp
 
     # Mellinger 2011
-    z_B = acceleration_sp_NED / np.linalg.norm(acceleration_sp_NED)
-    x_C = np.array([np.cos(yaw_sp), np.sin(yaw_sp), 0.0])
-    y_B = np.cross(z_B, x_C) / np.linalg.norm(np.cross(z_B, x_C))
-    x_B = np.cross(y_B, z_B)
+    t = np.array([acceleration_sp_NED[0], acceleration_sp_NED[1], acceleration_sp_NED[2]])
 
-    R_d = np.array([x_B, y_B, z_B])
+    z_B = t / np.linalg.norm(t)
+    y_C = np.array([-np.sin(yaw_sp), np.cos(yaw_sp), 0.0])
+    x_B = np.cross(y_C, z_B) / np.linalg.norm(np.cross(y_C, z_B))
+    if (z_B[2] < 0.0):
+        x_B = -x_B
+
+    if (np.abs(z_B[2]) < 1e-6):
+        x_B = np.empty(3)
+        x_B[2] = 1.0
+
+    x_B = x_B / np.linalg.norm(x_B) # normalization
+    y_B = np.cross(z_B, x_B)
+
+    R_d = np.column_stack([x_B, y_B, z_B])
     q_d = R.from_matrix(R_d).as_quat(scalar_first=True)
-
+    q_d = [1.0, 0.0, 0.0, 0.0]
     return thrust, q_d
