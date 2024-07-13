@@ -1,4 +1,5 @@
 import numpy as np
+from math import sqrt, atan2, asin, pi
 from scipy.spatial.transform import Rotation as R
 
 def set_mpc_target_pos(NmpcNode, position_pts): # Mock trajectory for testing
@@ -99,9 +100,12 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
         ValueError("Attitude is not set")
 
     current_R = R.from_quat(NmpcNode.attitude, scalar_first=True)
+    current_z_B = current_R.apply(np.array([0.0, 0.0, 1.0]))
 
-    # acceleration_sp_NED[0] = np.clip(acceleration_sp_NED[0], -1.0, 1.0)
-    # acceleration_sp_NED[1] = np.clip(acceleration_sp_NED[1], -1.0, 1.0)
+    max_acc_xy = max(np.abs(acceleration_sp_NED[0]), np.abs(acceleration_sp_NED[1]))
+    for i in range(len(acceleration_sp_NED) - 1):
+        if np.abs(acceleration_sp_NED[i]) > 1.0:
+            acceleration_sp_NED[i] = acceleration_sp_NED[i] / max_acc_xy
 
     if acceleration_sp_NED.shape == (3, 1):
         acceleration_sp_NED = acceleration_sp_NED.reshape(3)
@@ -109,32 +113,66 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
         raise ValueError("acceleration_sp_NED must be of shape (3,) or (3, 1)")
 
     acceleration_sp_body = current_R.apply(acceleration_sp_NED)
-    print(acceleration_sp_body)
 
     thrust = acceleration_sp_body[2] * 2.0
     # if np.abs(thrust) < 0.1:
-    #    raise ValueError("Thrust is too low")
+    #     raise ValueError("Thrust is too low")
     thrust = normalize_thrust(thrust)
     thrust = np.clip(thrust, -1.0, 0.0)
     yaw_sp = yaw_sp
 
-    # Mellinger 2011
-    t = np.array([acceleration_sp_NED[0], acceleration_sp_NED[1], acceleration_sp_NED[2]])
+    # PX4 ControlMath.cpp ->
+    a = np.array([acceleration_sp_NED[0], acceleration_sp_NED[1], acceleration_sp_NED[2] + 9.81])
 
-    z_B = t / np.linalg.norm(t)
-    y_C = np.array([-np.sin(yaw_sp), np.cos(yaw_sp), 0.0])
-    x_B = np.cross(y_C, z_B) / np.linalg.norm(np.cross(y_C, z_B))
-    if (z_B[2] < 0.0):
-        x_B = -x_B
+    t = a / np.linalg.norm(a)
 
-    if (np.abs(z_B[2]) < 1e-6):
-        x_B = np.empty(3)
-        x_B[2] = 1.0
+    theta = np.arcsin(t[0] / np.linalg.norm(t))
+    phi = np.arctan2(-t[1], -t[2])
 
-    x_B = x_B / np.linalg.norm(x_B) # normalization
-    y_B = np.cross(z_B, x_B)
+    # z_B = t / np.linalg.norm(t)
+    # y_C = np.array([-np.sin(yaw_sp), np.cos(yaw_sp), 0.0])
+    # x_B = np.cross(y_C, z_B) / np.linalg.norm(np.cross(y_C, z_B))
 
-    R_d = np.column_stack([x_B, y_B, z_B])
+    # if (z_B[2] < 0.0):
+    #     x_B = - x_B
+
+    # if (np.abs(z_B[2]) < 1e-6):
+    #     x_B = np.empty(3)
+    #     x_B[2] = 1.0
+
+    # x_B = x_B / np.linalg.norm(x_B) # normalization
+    # y_B = np.cross(z_B, x_B) / np.linalg.norm(np.cross(z_B, x_B))
+
+    # R_d = np.column_stack([x_B, y_B, z_B])
+
+    R_d = R.from_euler('zyx', [yaw_sp, theta, phi], degrees=False).as_matrix()
     q_d = R.from_matrix(R_d).as_quat(scalar_first=True)
-    q_d = [1.0, 0.0, 0.0, 0.0]
+
     return thrust, q_d
+
+def quaternion_multiply(q1, q0):
+    Q1 = np.array([
+        [q1[0], -q1[1], -q1[2], -q1[3]],
+        [q1[1], q1[0], -q1[3], q1[2]],
+        [q1[2], q1[0], q1[0], -q1[1]],
+        [q1[3], -q1[2], q1[1], q1[0]]
+    ])
+
+    return Q1 @ q0
+
+def skew_simmetric(z):
+    return np.array([
+        [0, -z[2], z[1]],
+        [z[2], 0, -z[0]],
+        [-z[1], z[0], 0]
+    ])
+
+def s_function(a, b):
+    a = np.array(a)
+    b = np.array(b)
+
+    a = np.reshape(a, (3, 1))
+    b = np.reshape(b, (3, 1))
+
+    out = np.sqrt(1 - (np.dot(np.transpose(a), b))**2)
+    return out
