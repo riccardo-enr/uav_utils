@@ -1,7 +1,7 @@
 import numpy as np
 from math import sqrt, atan2, asin, pi
 from scipy.spatial.transform import Rotation as R
-import quaternion as quat
+# import quaternion as quat
 
 def set_mpc_target_pos(NmpcNode, position_pts): # Mock trajectory for testing
     if position_pts is None:
@@ -97,12 +97,14 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
         thrust: The thrust value in the body frame (normalized) [0,-1].
         q_d: The desired attitude quaternion of the UAV body frame in the NED.
     """
-    if NmpcNode.attitude is None:
-        ValueError("Attitude is not set")
-        NmpcNode.attitude = np.array([1.0, 0.0, 0.0, 0.0])
+    if NmpcNode is None:
+        current_attitude = np.array([1.0, 0.0, 0.0, 0.0])
+    else:
+        current_attitude = NmpcNode.attitude
 
-    current_R = R.from_quat(NmpcNode.attitude, scalar_first=True)
-    current_z_B = current_R.apply(np.array([0.0, 0.0, 1.0]))
+    current_R = R.from_quat(current_attitude, scalar_first=True)
+    current_R = current_R.as_matrix()
+    current_z_B = current_R @ np.array([0.0, 0.0, 1.0])
 
     max_acc_xy = max(np.abs(acceleration_sp_NED[0]), np.abs(acceleration_sp_NED[1]))
     for i in range(len(acceleration_sp_NED) - 1):
@@ -112,20 +114,20 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
     if acceleration_sp_NED.shape == (3, 1):
         acceleration_sp_NED = acceleration_sp_NED.reshape(3)
     elif acceleration_sp_NED.shape != (3,):
-        raise ValueError("acceleration_sp_NED must be of shape (3,) or (3, 1)")
+        raise ValueError("acceleration_sp_NED must be of shape (3,) or (3, 1), instead the shape is " + str(acceleration_sp_NED.shape) + ".")
 
-    acceleration_sp_body = current_R.apply(acceleration_sp_NED)
+    acceleration_sp_body = current_R @ acceleration_sp_NED
 
     thrust = acceleration_sp_body[2] * 2.0
 
     thrust = normalize_thrust(thrust)
     thrust = np.clip(thrust, -1.0, 0.0)
 
-    q_d = acc2quaternion(acceleration_sp_body, yaw_sp)
+    q_d, eul_d = acc2quaternion(acceleration_sp_body, yaw_sp, euler=True)
 
-    return thrust, q_d
+    return thrust, q_d, eul_d
 
-def acc2quaternion(acc_sp, yaw):
+def acc2quaternion(acc_sp, yaw, euler=False):
     """
     Converts the desired acceleration in the NED frame to the desired attitude quaternion of the UAV body frame in the NED.
 
@@ -136,6 +138,8 @@ def acc2quaternion(acc_sp, yaw):
     Output:
         q_d: The desired attitude quaternion of the UAV body frame in the NED.
     """
+    g_ = 9.81
+    acc_sp = np.array([acc_sp[0], acc_sp[1], acc_sp[2]])
     z_B = acc_sp / np.linalg.norm(acc_sp)
 
     x_C = np.array([np.cos(yaw), np.sin(yaw), 0.0])
@@ -144,8 +148,13 @@ def acc2quaternion(acc_sp, yaw):
 
     R_d = np.vstack([x_B, y_B, z_B]).T
     q_d = R.from_matrix(R_d).as_quat(scalar_first=True)
+    q_d = np.array(q_d)
 
-    return q_d
+    if euler:
+        eul_d = R.from_quat(q_d).as_euler('zyx', degrees=False)
+        return q_d, eul_d
+    else:
+        return q_d
 
 def quaternion_multiply(q1, q0):
     # TODO: Spostare in quaternion.py
