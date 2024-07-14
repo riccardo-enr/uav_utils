@@ -115,42 +115,38 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
     acceleration_sp_body = current_R.apply(acceleration_sp_NED)
 
     thrust = acceleration_sp_body[2] * 2.0
-    # if np.abs(thrust) < 0.1:
-    #     raise ValueError("Thrust is too low")
+
     thrust = normalize_thrust(thrust)
     thrust = np.clip(thrust, -1.0, 0.0)
-    yaw_sp = yaw_sp
 
-    # PX4 ControlMath.cpp ->
-    a = np.array([acceleration_sp_NED[0], acceleration_sp_NED[1], acceleration_sp_NED[2] + 9.81])
-
-    t = a / np.linalg.norm(a)
-
-    theta = np.arcsin(t[0] / np.linalg.norm(t))
-    phi = np.arctan2(-t[1], -t[2])
-
-    # z_B = t / np.linalg.norm(t)
-    # y_C = np.array([-np.sin(yaw_sp), np.cos(yaw_sp), 0.0])
-    # x_B = np.cross(y_C, z_B) / np.linalg.norm(np.cross(y_C, z_B))
-
-    # if (z_B[2] < 0.0):
-    #     x_B = - x_B
-
-    # if (np.abs(z_B[2]) < 1e-6):
-    #     x_B = np.empty(3)
-    #     x_B[2] = 1.0
-
-    # x_B = x_B / np.linalg.norm(x_B) # normalization
-    # y_B = np.cross(z_B, x_B) / np.linalg.norm(np.cross(z_B, x_B))
-
-    # R_d = np.column_stack([x_B, y_B, z_B])
-
-    R_d = R.from_euler('zyx', [yaw_sp, theta, phi], degrees=False).as_matrix()
-    q_d = R.from_matrix(R_d).as_quat(scalar_first=True)
+    q_d = acc2quaternion(acceleration_sp_body, yaw_sp)
 
     return thrust, q_d
 
+def acc2quaternion(acc_sp, yaw):
+    """
+    Converts the desired acceleration in the NED frame to the desired attitude quaternion of the UAV body frame in the NED.
+
+    Args:
+        acc_sp: The desired acceleration in the NED frame.
+        yaw: The desired yaw angle in the NED frame.
+
+    Output:
+        q_d: The desired attitude quaternion of the UAV body frame in the NED.
+    """
+    z_B = acc_sp / np.linalg.norm(acc_sp)
+
+    x_C = np.array([np.cos(yaw), np.sin(yaw), 0.0])
+    y_B = np.cross(z_B, x_C) / np.linalg.norm(np.cross(z_B, x_C))
+    x_B = np.cross(y_B, z_B) / np.linalg.norm(np.cross(y_B, z_B))
+
+    R_d = np.vstack([x_B, y_B, z_B]).T
+    q_d = R.from_matrix(R_d).as_quat(scalar_first=True)
+
+    return q_d
+
 def quaternion_multiply(q1, q0):
+    # TODO: Spostare in quaternion.py
     Q1 = np.array([
         [q1[0], -q1[1], -q1[2], -q1[3]],
         [q1[1], q1[0], -q1[3], q1[2]],
