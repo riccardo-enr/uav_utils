@@ -1,7 +1,6 @@
 import numpy as np
 import casadi as cs
 from scipy.spatial.transform import Rotation as R
-# from casadi import SX, MX, vertcat, Function, sqrt, norm_2, dot, cross, atan2, if_else
 import spatial_casadi as sc
 
 def euler_to_quaternion_numpy(rpy):
@@ -18,10 +17,10 @@ def euler_to_quaternion_numpy(rpy):
     roll, pitch, yaw = rpy
     # Create a rotation object from Euler angles
     r = R.from_euler('xyz', [roll, pitch, yaw], degrees=True)
-    
+
     # Convert the rotation object to quaternion (scalar-last format)
     q = r.as_quat()
-    
+
 def quat2rotm(q):
     """
     Convert quaternion to rotation matrix
@@ -33,7 +32,7 @@ def quat2rotm(q):
     - np.array: Rotation matrix
     """
     pass
-    
+
 def quat2rotm(qw: cs.MX.sym, qx: cs.MX.sym, qy: cs.MX.sym, qz: cs.MX.sym) -> cs.MX.sym:
     """
     Convert quaternion to rotation matrix (Casadi version)
@@ -97,10 +96,10 @@ def quaternion_product_numpy(q1, q2):
     """
     q1 = np.asarray(q1)
     q2 = np.asarray(q2)
-    
+
     a1, b1, c1, d1 = q1
     a2, b2, c2, d2 = q2
-    
+
     a = a1 * a2 - b1 * b2 - c1 * c2 - d1 * d2
     b = a1 * b2 + b1 * a2 + c1 * d2 - d1 * c2
     c = a1 * c2 - b1 * d2 + c1 * a2 + d1 * b2
@@ -123,7 +122,7 @@ def quaternion_product_casadi(q1, q2):
     """
     a1, b1, c1, d1 = q1[0], q1[1], q1[2], q1[3]
     a2, b2, c2, d2 = q2[0], q2[1], q2[2], q2[3]
-    
+
     a = a1 * a2 - b1 * b2 - c1 * c2 - d1 * d2
     b = a1 * b2 + b1 * a2 + c1 * d2 - d1 * c2
     c = a1 * c2 - b1 * d2 + c1 * a2 + d1 * b2
@@ -145,10 +144,10 @@ def eul2quat(rpy):
     roll, pitch, yaw = rpy
     # Create a rotation object from Euler angles
     r = R.from_euler('xyz', [roll, pitch, yaw], degrees=True)
-    
+
     # Convert the rotation object to quaternion (scalar-last format)
     q = r.as_quat()
-    
+
 def quaternion_inverse(q):
     w, x, y, z = q[0], q[1], q[2], q[3]
 
@@ -156,7 +155,7 @@ def quaternion_inverse(q):
         return np.array([w, -x, -y, -z])
     else:
         return cs.vertcat(w, -x, -y, -z)
-    
+
 def quaternion_multiply(quaternion1, quaternion0):
     w0, x0, y0, z0 = quaternion0
     w1, x1, y1, z1 = quaternion1

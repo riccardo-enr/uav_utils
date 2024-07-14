@@ -1,6 +1,7 @@
 import numpy as np
 from math import sqrt, atan2, asin, pi
 from scipy.spatial.transform import Rotation as R
+import quaternion as quat
 
 def set_mpc_target_pos(NmpcNode, position_pts): # Mock trajectory for testing
     if position_pts is None:
@@ -98,6 +99,7 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
     """
     if NmpcNode.attitude is None:
         ValueError("Attitude is not set")
+        NmpcNode.attitude = np.array([1.0, 0.0, 0.0, 0.0])
 
     current_R = R.from_quat(NmpcNode.attitude, scalar_first=True)
     current_z_B = current_R.apply(np.array([0.0, 0.0, 1.0]))
