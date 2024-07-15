@@ -1,5 +1,6 @@
 import numpy as np
 from math import sqrt, atan2, asin, pi
+import scipy
 from scipy.spatial.transform import Rotation as R
 # import quaternion as quat
 
@@ -12,7 +13,7 @@ def set_mpc_target_pos(NmpcNode, position_pts): # Mock trajectory for testing
     thrust_constant = 8.54858e-06
     max_rotor_speed = 1000
     max_thrust = thrust_constant * max_rotor_speed**2
-    hover_thrust = 0.8 * max_thrust * 4
+    hover_thrust = 0.5 * max_thrust * 4
 
     acc_setpoint = np.array([0.0, 0.0, hover_thrust / 2.0])
 
@@ -102,14 +103,15 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
     else:
         current_attitude = NmpcNode.attitude
 
-    current_R = R.from_quat(current_attitude, scalar_first=True)
-    current_R = current_R.as_matrix()
-    current_z_B = current_R @ np.array([0.0, 0.0, 1.0])
+    current_R = quat2RotMatrix(current_attitude)
+
+    normal_acc = False
 
     max_acc_xy = max(np.abs(acceleration_sp_NED[0]), np.abs(acceleration_sp_NED[1]))
-    for i in range(len(acceleration_sp_NED) - 1):
-        if np.abs(acceleration_sp_NED[i]) > 1.0:
-            acceleration_sp_NED[i] = acceleration_sp_NED[i] / max_acc_xy
+    if normal_acc:
+        for i in range(len(acceleration_sp_NED) - 1):
+            if np.abs(acceleration_sp_NED[i]) > 1.0:
+                acceleration_sp_NED[i] = acceleration_sp_NED[i] / max_acc_xy
 
     if acceleration_sp_NED.shape == (3, 1):
         acceleration_sp_NED = acceleration_sp_NED.reshape(3)
@@ -118,16 +120,15 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
 
     acceleration_sp_body = current_R @ acceleration_sp_NED
 
-    thrust = acceleration_sp_body[2] * 2.0
+    thrust = acceleration_sp_body[2] * NmpcNode.mass
 
+    q_d, eul_d = acc2quaternion(acceleration_sp_body, yaw_sp, thrust, euler=True)
     thrust = normalize_thrust(thrust)
     thrust = np.clip(thrust, -1.0, 0.0)
 
-    q_d, eul_d = acc2quaternion(acceleration_sp_body, yaw_sp, euler=True)
-
     return thrust, q_d, eul_d
 
-def acc2quaternion(acc_sp, yaw, euler=False):
+def acc2quaternion(acc_sp, yaw, thrust, euler=False):
     """
     Converts the desired acceleration in the NED frame to the desired attitude quaternion of the UAV body frame in the NED.
 
@@ -140,21 +141,85 @@ def acc2quaternion(acc_sp, yaw, euler=False):
     """
     g_ = 9.81
     acc_sp = np.array([acc_sp[0], acc_sp[1], acc_sp[2]])
-    z_B = acc_sp / np.linalg.norm(acc_sp)
+
+    if scipy.linalg.norm(acc_sp) < 1e-6 or acc_sp[2] + g_ > 0.0:
+        z_B = np.array([0.0, 0.0, 1.0])
+    else:
+        z_B = - acc_sp / np.linalg.norm(acc_sp)
 
     x_C = np.array([np.cos(yaw), np.sin(yaw), 0.0])
-    y_B = np.cross(z_B, x_C) / np.linalg.norm(np.cross(z_B, x_C))
-    x_B = np.cross(y_B, z_B) / np.linalg.norm(np.cross(y_B, z_B))
+    y_C = np.array([-np.sin(yaw), np.cos(yaw), 0.0])
+    x_B = np.cross(y_C, z_B)
+    x_B /= np.linalg.norm(x_B)
 
-    R_d = np.vstack([x_B, y_B, z_B]).T
-    q_d = R.from_matrix(R_d).as_quat(scalar_first=True)
-    q_d = np.array(q_d)
+    if z_B[2] < 0.0:
+        x_B = -x_B
+
+    if np.abs(z_B[2]) < 1e-6:
+        x_B = np.array([0.0, 0.0, 1.0])
+
+    y_B = np.cross(z_B, x_B)
+    y_B /= np.linalg.norm(y_B)
+
+    R_d = np.column_stack([x_B, y_B, z_B])
+    # print(R_d)
+    q_d = rot2Quaternion(R_d)
+
+    acc_sp_check = R_d @ np.array([0.0, 0.0, thrust])
+
+    if not np.allclose(acc_sp, acc_sp_check):
+        print("Error in acc2quaternion: acc_sp = ", acc_sp, ", acc_sp_check = ", acc_sp_check)
 
     if euler:
         eul_d = R.from_quat(q_d).as_euler('zyx', degrees=False)
         return q_d, eul_d
     else:
         return q_d
+
+def quat2RotMatrix(q):
+    rotmat = np.zeros((3, 3))
+    rotmat[0, 0] = q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]
+    rotmat[0, 1] = 2 * q[1] * q[2] - 2 * q[0] * q[3]
+    rotmat[0, 2] = 2 * q[0] * q[2] + 2 * q[1] * q[3]
+
+    rotmat[1, 0] = 2 * q[0] * q[3] + 2 * q[1] * q[2]
+    rotmat[1, 1] = q[0] * q[0] - q[1] * q[1] + q[2] * q[2] - q[3] * q[3]
+    rotmat[1, 2] = 2 * q[2] * q[3] - 2 * q[0] * q[1]
+
+    rotmat[2, 0] = 2 * q[1] * q[3] - 2 * q[0] * q[2]
+    rotmat[2, 1] = 2 * q[0] * q[1] + 2 * q[2] * q[3]
+    rotmat[2, 2] = q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]
+
+    return rotmat
+
+def rot2Quaternion(R):
+    quat = np.zeros(4)
+    tr = np.trace(R)
+    if tr > 0.0:
+        S = np.sqrt(tr + 1.0) * 2.0  # S=4*qw
+        quat[0] = 0.25 * S
+        quat[1] = (R[2, 1] - R[1, 2]) / S
+        quat[2] = (R[0, 2] - R[2, 0]) / S
+        quat[3] = (R[1, 0] - R[0, 1]) / S
+    elif (R[0, 0] > R[1, 1]) and (R[0, 0] > R[2, 2]):
+        S = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2.0  # S=4*qx
+        quat[0] = (R[2, 1] - R[1, 2]) / S
+        quat[1] = 0.25 * S
+        quat[2] = (R[0, 1] + R[1, 0]) / S
+        quat[3] = (R[0, 2] + R[2, 0]) / S
+    elif R[1, 1] > R[2, 2]:
+        S = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2.0  # S=4*qy
+        quat[0] = (R[0, 2] - R[2, 0]) / S
+        quat[1] = (R[0, 1] + R[1, 0]) / S
+        quat[2] = 0.25 * S
+        quat[3] = (R[1, 2] + R[2, 1]) / S
+    else:
+        S = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2.0  # S=4*qz
+        quat[0] = (R[1, 0] - R[0, 1]) / S
+        quat[1] = (R[0, 2] + R[2, 0]) / S
+        quat[2] = (R[1, 2] + R[2, 1]) / S
+        quat[3] = 0.25 * S
+    return quat
 
 def quaternion_multiply(q1, q0):
     # TODO: Spostare in quaternion.py

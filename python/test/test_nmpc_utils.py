@@ -1,5 +1,6 @@
 import os
 import sys
+sys.stdout.write('test')
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
@@ -8,11 +9,16 @@ from matplotlib.ticker import ScalarFormatter
 from control import nmpc_utils
 # import control.nmpc_utils as nmpc_utils
 
+class FakeNmpcNode():
+    def __init__(self):
+        self.mass = 2.0;
+        self.attitude = np.array([1.0, 0.0, 0.0, 0.0])
+
 def set_acc_sp():
     time = np.linspace(0, 5, num=int(5/0.1) + 1)
     x_sp = 0.25 * np.cos(time)
     # x_sp = np.full(len(time), 0.0)  # Create an array of 0.0 for the entire range of time
-    y_sp = 0.25 * np.sin(time)
+    y_sp = 0.5 * np.sin(time)
     # y_sp = np.full(len(time), 0.0)  # Create an array of 0.0 for the entire range of time
     z_sp = np.full(len(time), -12.0)  # Create an array of -12.0 for the entire range of time
     yaw_sp = 0.0
@@ -26,6 +32,7 @@ def set_acc_sp():
     return acc_sp, time
 
 def main():
+    fake_uav = FakeNmpcNode()
     try:
         acc_sp, time = set_acc_sp()
         thrust = np.zeros(len(acc_sp))
@@ -34,7 +41,7 @@ def main():
         print(len(acc_sp))
         for i in range(len(acc_sp)):
             print("acc_sp: ", acc_sp[i])
-            thrust[i], q_d[i], eul_d[i] = nmpc_utils.acceleration_sp_to_thrust_q(None, acc_sp[i], 0.0)
+            thrust[i], q_d[i], eul_d[i] = nmpc_utils.acceleration_sp_to_thrust_q(fake_uav, acc_sp[i], 0.0)
             print("Thrust: ", thrust[i])
             print("q_d: ", q_d[i])
             print("eul_d: ", eul_d[i])
