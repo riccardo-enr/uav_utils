@@ -17,10 +17,12 @@ def set_mpc_target_pos(NmpcNode, position_pts): # Mock trajectory for testing
 
     acc_setpoint = np.array([0.0, 0.0, hover_thrust / 2.0])
 
-    for j in range(NmpcNode.solver.N):
+    for j in range(NmpcNode.solver.N - 1):
         yref = np.concatenate([position_pts[j], np.zeros(3), acc_setpoint], axis=0)
         NmpcNode.p[-9:] = yref
         NmpcNode.solver.set(j, "p", NmpcNode.p)
+
+    NmpcNode.solver.set(NmpcNode.solver.N, "p", NmpcNode.p) # terminal setpoint
 
 def set_current_state(NmpcNode):
     """aggregates individual states to combined state of system
@@ -85,13 +87,13 @@ def normalize_thrust(thrust):
 
     return thrust
 
-def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
+def acceleration_sp_to_thrust_q(NmpcNode, acc_sp_NED, yaw_sp):
     """
     Converts the desired acceleration in the NED frame to thrust and attitude quaternion.
 
     Args:
         NmpcNode: The NmpcNode object.
-        acceleration_sp_NED: The desired acceleration in the NED frame, from NMPC.
+        acc_sp_NED: The desired acceleration in the NED frame, from NMPC.
         yaw_sp: The desired yaw angle in the NED frame.
 
     Returns:
@@ -105,30 +107,31 @@ def acceleration_sp_to_thrust_q(NmpcNode, acceleration_sp_NED, yaw_sp):
 
     current_R = quat2RotMatrix(current_attitude)
 
-    normal_acc = False
+    if acc_sp_NED.shape == (3, 1):
+        acc_sp_NED = acc_sp_NED.reshape(3)
+    elif acc_sp_NED.shape != (3,):
+        raise ValueError("acc_sp_NED must be of shape (3,) or (3, 1), instead the shape is " + str(acc_sp_NED.shape) + ".")
 
-    max_acc_xy = max(np.abs(acceleration_sp_NED[0]), np.abs(acceleration_sp_NED[1]))
+    normal_acc = True
+    max_acc_xy = max(np.abs(acc_sp_NED[0]), np.abs(acc_sp_NED[1]))
     if normal_acc:
-        for i in range(len(acceleration_sp_NED) - 1):
-            if np.abs(acceleration_sp_NED[i]) > 1.0:
-                acceleration_sp_NED[i] = acceleration_sp_NED[i] / max_acc_xy
+        for i in range(len(acc_sp_NED) - 1):
+            if np.abs(acc_sp_NED[i]) > 1.0:
+                acc_sp_NED[i] = acc_sp_NED[i] / max_acc_xy
 
-    if acceleration_sp_NED.shape == (3, 1):
-        acceleration_sp_NED = acceleration_sp_NED.reshape(3)
-    elif acceleration_sp_NED.shape != (3,):
-        raise ValueError("acceleration_sp_NED must be of shape (3,) or (3, 1), instead the shape is " + str(acceleration_sp_NED.shape) + ".")
+    Tz = np.sqrt(acc_sp_NED[0]**2 + acc_sp_NED[1]**2 + acc_sp_NED[2]**2)
+    acceleration_sp_body = current_R @ acc_sp_NED
 
-    acceleration_sp_body = current_R @ acceleration_sp_NED
+    # thrust = acceleration_sp_body[2] * NmpcNode.mass
+    thrust = Tz * NmpcNode.mass
 
-    thrust = acceleration_sp_body[2] * NmpcNode.mass
-
-    q_d, eul_d = acc2quaternion(acceleration_sp_body, yaw_sp, thrust, euler=True)
+    q_d, eul_d = acc2quaternion(NmpcNode, acc_sp_NED, yaw_sp, Tz, euler=True)
     thrust = normalize_thrust(thrust)
     thrust = np.clip(thrust, -1.0, 0.0)
 
     return thrust, q_d, eul_d
 
-def acc2quaternion(acc_sp, yaw, thrust, euler=False):
+def acc2quaternion(NmpcNode, acc_sp, psi, Tz, euler=False):
     """
     Converts the desired acceleration in the NED frame to the desired attitude quaternion of the UAV body frame in the NED.
 
@@ -142,39 +145,25 @@ def acc2quaternion(acc_sp, yaw, thrust, euler=False):
     g_ = 9.81
     acc_sp = np.array([acc_sp[0], acc_sp[1], acc_sp[2]])
 
-    if scipy.linalg.norm(acc_sp) < 1e-6 or acc_sp[2] + g_ > 0.0:
-        z_B = np.array([0.0, 0.0, 1.0])
-    else:
-        z_B = - acc_sp / np.linalg.norm(acc_sp)
-
-    x_C = np.array([np.cos(yaw), np.sin(yaw), 0.0])
-    y_C = np.array([-np.sin(yaw), np.cos(yaw), 0.0])
-    x_B = np.cross(y_C, z_B)
-    x_B /= np.linalg.norm(x_B)
-
-    if z_B[2] < 0.0:
-        x_B = -x_B
-
-    if np.abs(z_B[2]) < 1e-6:
-        x_B = np.array([0.0, 0.0, 1.0])
-
-    y_B = np.cross(z_B, x_B)
-    y_B /= np.linalg.norm(y_B)
-
-    R_d = np.column_stack([x_B, y_B, z_B])
-    # print(R_d)
-    q_d = rot2Quaternion(R_d)
-
-    acc_sp_check = R_d @ np.array([0.0, 0.0, thrust])
-
-    if not np.allclose(acc_sp, acc_sp_check):
-        print("Error in acc2quaternion: acc_sp = ", acc_sp, ", acc_sp_check = ", acc_sp_check)
+    num = - (acc_sp[0] * np.sin(psi) - acc_sp[1] * np.cos(psi)) / Tz
+    phi_des = np.arctan2(num, np.sqrt(1 - num**2))
+    theta_des = np.arctan2(
+        - acc_sp[0] * np.cos(psi) - acc_sp[1] * np.sin(psi),
+        NmpcNode.mass * g_ - acc_sp[2]
+    )
 
     if euler:
-        eul_d = R.from_quat(q_d).as_euler('zyx', degrees=False)
-        return q_d, eul_d
+        R_d = R.from_euler('xyz', [phi_des, theta_des, psi]).as_matrix()
+        return rot2Quaternion(R_d), [phi_des, theta_des, psi]
     else:
-        return q_d
+        R_d = R.from_euler('xyz', [phi_des, theta_des, psi]).as_matrix()    
+        return rot2Quaternion(R_d)
+
+    ## DEBUG
+    # acc_sp_check = R_d @ np.array([0.0, 0.0, a_z])
+
+    # if not np.allclose(acc_sp, acc_sp_check):
+    #     print("Error in acc2quaternion: acc_sp = ", acc_sp, ", acc_sp_check = ", acc_sp_check)
 
 def quat2RotMatrix(q):
     rotmat = np.zeros((3, 3))
