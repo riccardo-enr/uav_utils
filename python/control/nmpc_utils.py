@@ -4,11 +4,11 @@ import scipy
 from scipy.spatial.transform import Rotation as R
 # import quaternion as quat
 
-def set_mpc_target_pos(NmpcNode, position_pts): # Mock trajectory for testing
-    if position_pts is None:
+def set_mpc_target_pos(NmpcNode, reference_pts): # Mock trajectory for testing
+    if reference_pts is None:
         position_pts = np.array([[0.0, 0.0, - 2.0]] * (NmpcNode.N + 1))  # Example position setpoint
     else:
-        position_pts = position_pts
+        reference_pts = reference_pts
 
     thrust_constant = 8.54858e-06
     max_rotor_speed = 1000
@@ -17,12 +17,12 @@ def set_mpc_target_pos(NmpcNode, position_pts): # Mock trajectory for testing
 
     acc_setpoint = np.array([0.0, 0.0, hover_thrust / 2.0])
 
-    for j in range(NmpcNode.solver.N - 1):
-        yref = np.concatenate([position_pts[j], np.zeros(3), acc_setpoint], axis=0)
+    for j in range(NmpcNode.solver.N):
+        yref = reference_pts[j]
         NmpcNode.p[-9:] = yref
         NmpcNode.solver.set(j, "p", NmpcNode.p)
 
-    NmpcNode.solver.set(NmpcNode.solver.N, "p", NmpcNode.p) # terminal setpoint
+    # NmpcNode.solver.set(NmpcNode.solver.N, "p", NmpcNode.p) # terminal setpoint
 
 def set_current_state(NmpcNode):
     """aggregates individual states to combined state of system
@@ -38,6 +38,31 @@ def set_current_state(NmpcNode):
     NmpcNode.state_history.append(NmpcNode.current_state)
     #self.imu_history.append(self.imu_data)
 
+def set_init_u0(NmpcNode, index = 1):
+    """
+    Set the initial control input for the NMPC solver.
+
+    Parameters:
+    - NmpcNode: The NMPC node object.
+    - index: The index at which to start the control input initialization.
+
+    Returns:
+    None
+    """
+    if index < 1:
+        index = 1
+    else:
+        index = index
+    
+    thrust_constant = 8.54858e-06
+    max_rotor_speed = 1000
+    max_thrust = thrust_constant * max_rotor_speed**2
+    hover_thrust = 0.65 * max_thrust * 4
+    hover_acc = - hover_thrust / NmpcNode.mass
+    
+    for j in (range(NmpcNode.solver.N - index)):
+        NmpcNode.solver.set(j + index, "u", np.array([0.0, 0.0, hover_acc]))
+        
 def thrust_to_motor_values(thrust):
     """Converts thrust to motor values
     """
@@ -78,7 +103,7 @@ def normalize_thrust(thrust):
     """Normalizes thrust to be between 0 and 1
     """
     thrust_constant = 8.54858e-06
-    max_rotor_speed = 1000
+    max_rotor_speed = 900
 
     # max_thrust
     max_thrust = thrust_constant * max_rotor_speed**2
@@ -123,7 +148,7 @@ def acceleration_sp_to_thrust_q(NmpcNode, acc_sp_NED, yaw_sp):
     acceleration_sp_body = current_R @ acc_sp_NED
 
     # thrust = acceleration_sp_body[2] * NmpcNode.mass
-    thrust = Tz * NmpcNode.mass
+    thrust = - Tz * NmpcNode.mass
 
     q_d, eul_d = acc2quaternion(NmpcNode, acc_sp_NED, yaw_sp, Tz, euler=True)
     thrust = normalize_thrust(thrust)
@@ -143,27 +168,26 @@ def acc2quaternion(NmpcNode, acc_sp, psi, Tz, euler=False):
         q_d: The desired attitude quaternion of the UAV body frame in the NED.
     """
     g_ = 9.81
-    acc_sp = np.array([acc_sp[0], acc_sp[1], acc_sp[2]])
+    acc_sp = np.array([acc_sp[0], acc_sp[1], acc_sp[2] + g_])
 
     num = - (acc_sp[0] * np.sin(psi) - acc_sp[1] * np.cos(psi)) / Tz
     phi_des = np.arctan2(num, np.sqrt(1 - num**2))
     theta_des = np.arctan2(
         - acc_sp[0] * np.cos(psi) - acc_sp[1] * np.sin(psi),
-        NmpcNode.mass * g_ - acc_sp[2]
+        g_ - acc_sp[2]
     )
+    
+    max_angle = np.radians(20)
+    
+    phi_des = np.clip(phi_des, -max_angle, max_angle)
+    theta_des = np.clip(theta_des, -max_angle, max_angle)
 
     if euler:
         R_d = R.from_euler('xyz', [phi_des, theta_des, psi]).as_matrix()
         return rot2Quaternion(R_d), [phi_des, theta_des, psi]
     else:
-        R_d = R.from_euler('xyz', [phi_des, theta_des, psi]).as_matrix()    
+        R_d = R.from_euler('xyz', [phi_des, theta_des, psi]).as_matrix()
         return rot2Quaternion(R_d)
-
-    ## DEBUG
-    # acc_sp_check = R_d @ np.array([0.0, 0.0, a_z])
-
-    # if not np.allclose(acc_sp, acc_sp_check):
-    #     print("Error in acc2quaternion: acc_sp = ", acc_sp, ", acc_sp_check = ", acc_sp_check)
 
 def quat2RotMatrix(q):
     rotmat = np.zeros((3, 3))
