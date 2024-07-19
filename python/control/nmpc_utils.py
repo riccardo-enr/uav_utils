@@ -177,10 +177,10 @@ def acc2quaternion(NmpcNode, acc_sp, psi, Tz, euler=False):
         g_ - acc_sp[2]
     )
     
-    max_angle = np.radians(20)
+    # max_angle = np.radians(30)
     
-    phi_des = np.clip(phi_des, -max_angle, max_angle)
-    theta_des = np.clip(theta_des, -max_angle, max_angle)
+    # phi_des = np.clip(phi_des, -max_angle, max_angle)
+    # theta_des = np.clip(theta_des, -max_angle, max_angle)
 
     if euler:
         R_d = R.from_euler('xyz', [phi_des, theta_des, psi]).as_matrix()
